@@ -1,13 +1,11 @@
 sudo: true
 os: trusty
 cache: false
-
 env:
-- URL=https://developer.salesforce.com/media/salesforce-cli/sfdx-linux-amd64.tar.xz
-
+  matrix:
+  - URL=https://developer.salesforce.com/media/salesforce-cli/sfdx-linux-amd64.tar.xz
+  
 before_install:
-- openssl aes-256-cbc -K $encrypted_b1fbf710b918_key -iv $encrypted_b1fbf710b918_iv
-  -in assets/server.key.enc -out assets/server.key -d
 - export SFDX_AUTOUPDATE_DISABLE=false
 - export SFDX_USE_GENERIC_UNIX_KEYCHAIN=true
 - export SFDX_DOMAIN_RETRY=300
@@ -16,14 +14,22 @@ before_install:
 - mkdir sfdx
 - wget -qO- $URL | tar xJ -C sfdx --strip-components 1
 - "./sfdx/install"
+before_script:
 - export PATH=./sfdx/$(pwd):$PATH
 - sfdx --version
-- sfdx plugins --core
-- sfdx force:auth:jwt:grant --clientid $CONSUMERKEY --jwtkeyfile assets/server.key --username $USERNAME --setdefaultdevhubusername -a HubOrg
-
+- sfdx plugins –core
+- openssl enc -d -aes-256-cbc -in assets/server.key.enc -out assets/server.key -K $AESKEY -iv $IVKEY
+- sfdx force:auth:jwt:grant --clientid $CONSUMERKEY_HUB --jwtkeyfile assets/server.key  --username $USERNAME_HUB --setdefaultdevhubusername -a HubOrg
 script:
-- sfdx force:org:create -v HubOrg -s -f config/project-scratch-def.json -a ciorg --wait 2
+- sfdx force:org:create -v HubOrg -s -f config/project-scratch-def.json -a ciorg --wait
+  2
 - sfdx force:org:display -u ciorg
 - sfdx force:source:push -u ciorg
 - sfdx force:apex:test:run -u ciorg --wait 10
 - sfdx force:org:delete -u ciorg -p
+- openssl enc -d -aes-256-cbc -in assets/server.key.enc -out assets/server.key -K $AESKEY -iv $IVKEY
+- sfdx force:auth:jwt:grant --clientid $CONSUMERKEY_TARGET --jwtkeyfile assets/server.key --username $USERNAME_TARGET -a TargetOrg
+- mkdir mdapioutput
+- sfdx force:source:convert -d mdapioutput/
+- sfdx force:mdapi:deploy -d mdapioutput/ -u TargetOrg -w 100
+- sfdx force:mdapi:deploy:report
